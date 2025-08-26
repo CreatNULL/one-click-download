@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Union
 from urllib.parse import urlparse
 from croniter import croniter
+from pathvalidate import sanitize_filename
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox,
@@ -67,10 +68,9 @@ class TaskExecutor(QThread):
     """任务执行器线程"""
     task_complete = Signal(dict, bool, str)
 
-    def __init__(self, configs: List[Dict[str, Any]], global_config: Dict[str, Any], max_workers: int = 4):
+    def __init__(self, configs: List[Dict[str, Any]], max_workers: int = 4):
         super().__init__()
         self.configs = configs
-        self.global_config = global_config
         self.max_workers = max_workers
         self._stop_flag = False
         self.downloaders = {}  # 存储所有下载器实例
@@ -108,26 +108,18 @@ class TaskExecutor(QThread):
         project_name = config['name']
         action_type = config.get('action_type', 'download').lower()
 
-        proxies = {
-            'http': self.global_config.get('proxies.http') if self.global_config.get('proxies.http') else None,
-            'https': self.global_config.get('proxies.https') if self.global_config.get('proxies.https') else None,
-        }
-
-        if not proxies or not self.global_config.get('enable_proxy'):
-            proxies = None
-
         try:
             downloader = GithubDownloader(
                 url=config['url'],
                 output=config.get('output'),
-                dingtalk_webhook=self.global_config['dingtalk_webhook'],
-                dingtalk_secret=self.global_config['dingtalk_secret'],
+                dingtalk_webhook=config['dingtalk_webhook'],
+                dingtalk_secret=config['dingtalk_secret'],
                 project_name=project_name,
                 only_latest=config['only_latest'],
                 threads=config['threads'],
-                log_file=config['log'],
+                log_file=config['log_file'],
                 verify=not config['ignore_ssl'],
-                proxies=proxies
+                proxies=config['proxies'],
             )
 
             # 存储下载器实例以便后续停止
@@ -168,6 +160,7 @@ class ConfigManager:
             f.write("proxies.https = \n")
             f.write("cron_expression = \n")
             f.write("scheduled_projects = \n")
+            f.write("log_file = \n")
 
     def get_global_config(self) -> Dict[str, str]:
         """获取全局配置"""
@@ -199,7 +192,50 @@ class GitHubDownloaderGUI(QMainWindow):
         self.config_file = os.path.join(self.app_path, "config.ini")
         self.config_manager = ConfigManager(self.config_file)
         self.task_executor = None
+        # 输出重定向
+        self.output_redirector = OutputRedirector()
+        # 日志处理
+        self.log_handler = LogHandler()
+        # 全局配置
+        self.global_log_file = QLineEdit()
+        self.output_path = QLineEdit()
+        self.log_file = QLineEdit()
+        self.dingtalk_webhook = QLineEdit()
+        self.dingtalk_secret = QLineEdit()
+        self.global_proxy_http = QLineEdit()
+        self.global_proxy_https = QLineEdit()
+        self.enable_proxy = QCheckBox("应用代理")
+        # 项目配置
+        self.tabs = QTabWidget() # 项目配置选项卡
+        self.save_btn = QPushButton("保存配置")
+        self.project_name = QLineEdit()
+        self.project_url = QLineEdit()
+        self.action_type = QComboBox()
+        self.threads = QComboBox()
+        self.only_latest = QCheckBox("仅最新版本")
+        self.ignore_ssl = QCheckBox("忽略SSL验证")
+        self.remarks = QLineEdit()
+        # 定时任务
         self.timer = QTimer(self)
+        self.cron_expression = QLineEdit()
+        self.next_executions = QPlainTextEdit()
+        self.start_timer_btn = QPushButton("启动定时")
+        self.stop_timer_btn = QPushButton("停止定时")
+        self.select_all_schedule_btn = QPushButton("全选")
+        self.deselect_all_schedule_btn = QPushButton("取消选择")
+        self.schedule_project_list = QListWidget() #多选列表
+        # 选择(为左侧列服务）
+        self.project_list = QListWidget()
+        self.add_btn = QPushButton("新增项目")
+        self.delete_btn = QPushButton("删除项目")
+        self.select_all_btn = QPushButton("全选")
+        self.deselect_all_btn = QPushButton("取消选择")
+        self.execute_btn = QPushButton("执行勾选项目")
+        self.execute_all_btn = QPushButton("执行所有项目")
+        self.stop_btn = QPushButton("停止执行")
+
+        self.log_display = QPlainTextEdit() # 日志显示
+        self.status_label = QLabel("就绪")  # 执行状态显示
 
         self.init_ui()
         self.setup_output_redirection()
@@ -207,7 +243,7 @@ class GitHubDownloaderGUI(QMainWindow):
 
     def setup_output_redirection(self):
         """设置输出重定向和日志处理"""
-        self.output_redirector = OutputRedirector()
+
         self.output_redirector.text_written.connect(self.append_log)
         sys.stdout = self.output_redirector
         sys.stderr = self.output_redirector
@@ -215,7 +251,6 @@ class GitHubDownloaderGUI(QMainWindow):
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
 
-        self.log_handler = LogHandler()
         self.log_handler.log_signal.connect(self.append_log)
         root_logger.addHandler(self.log_handler)
 
@@ -233,17 +268,15 @@ class GitHubDownloaderGUI(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         # 项目列表（多选模式）
-        self.project_list = QListWidget()
         self.project_list.setSelectionMode(QListWidget.MultiSelection)
         self.project_list.currentItemChanged.connect(self.load_project_data)
 
         # 项目操作按钮
         btn_layout = QHBoxLayout()
-        self.add_btn = QPushButton("新增项目")
+
         self.add_btn.clicked.connect(self.add_project)
         btn_layout.addWidget(self.add_btn)
 
-        self.delete_btn = QPushButton("删除项目")
         self.delete_btn.clicked.connect(self.delete_project)
         btn_layout.addWidget(self.delete_btn)
 
@@ -259,24 +292,19 @@ class GitHubDownloaderGUI(QMainWindow):
         control_layout = QHBoxLayout()
 
         # 选择控制按钮
-        self.select_all_btn = QPushButton("全选")
         self.select_all_btn.clicked.connect(self.select_all_projects)
         control_layout.addWidget(self.select_all_btn)
 
-        self.deselect_all_btn = QPushButton("取消选择")
         self.deselect_all_btn.clicked.connect(self.deselect_all_projects)
         control_layout.addWidget(self.deselect_all_btn)
 
         # 执行控制按钮
-        self.execute_btn = QPushButton("执行勾选项目")
         self.execute_btn.clicked.connect(self.execute_checked_projects)
         control_layout.addWidget(self.execute_btn)
 
-        self.execute_all_btn = QPushButton("执行所有项目")
         self.execute_all_btn.clicked.connect(self.execute_all_projects)
         control_layout.addWidget(self.execute_all_btn)
 
-        self.stop_btn = QPushButton("停止执行")
         self.stop_btn.clicked.connect(self.stop_execution)
         self.stop_btn.setEnabled(False)
         control_layout.addWidget(self.stop_btn)
@@ -284,7 +312,6 @@ class GitHubDownloaderGUI(QMainWindow):
         center_layout.addLayout(control_layout)
 
         # 日志显示
-        self.log_display = QPlainTextEdit()
         self.log_display.setReadOnly(True)
         center_layout.addWidget(self.log_display)
 
@@ -298,7 +325,7 @@ class GitHubDownloaderGUI(QMainWindow):
 
         # 配置选项卡
         self.tabs = QTabWidget()
-
+        self.save_btn = QPushButton("保存配置")
         # 项目设置选项卡
         project_tab = QWidget()
         self.init_project_tab(project_tab)
@@ -317,7 +344,6 @@ class GitHubDownloaderGUI(QMainWindow):
         right_layout.addWidget(self.tabs)
 
         # 保存按钮
-        self.save_btn = QPushButton("保存配置")
         self.save_btn.clicked.connect(self.save_config)
         right_layout.addWidget(self.save_btn)
 
@@ -334,17 +360,32 @@ class GitHubDownloaderGUI(QMainWindow):
         dingtalk_group = QGroupBox("钉钉机器人设置")
         dingtalk_layout = QVBoxLayout(dingtalk_group)
 
-        self.dingtalk_webhook = QLineEdit()
         self.dingtalk_webhook.setPlaceholderText("钉钉机器人Webhook地址")
         dingtalk_layout.addWidget(QLabel("Webhook地址:"))
         dingtalk_layout.addWidget(self.dingtalk_webhook)
 
-        self.dingtalk_secret = QLineEdit()
         self.dingtalk_secret.setPlaceholderText("钉钉机器人Secret")
         dingtalk_layout.addWidget(QLabel("Secret:"))
         dingtalk_layout.addWidget(self.dingtalk_secret)
 
         layout.addWidget(dingtalk_group)
+
+        # 日志文件设置
+        log_group = QGroupBox("日志设置")
+        log_layout = QVBoxLayout(log_group)
+
+        log_file_layout = QHBoxLayout()
+
+        self.global_log_file.setPlaceholderText("全局日志文件路径")
+        log_file_layout.addWidget(self.global_log_file)
+
+        log_browse_btn = QPushButton("浏览...")
+        log_browse_btn.clicked.connect(self.browse_global_log_path)
+        log_file_layout.addWidget(log_browse_btn)
+        log_layout.addWidget(QLabel("日志文件路径:"))
+        log_layout.addLayout(log_file_layout)
+
+        layout.addWidget(log_group)
 
         # 代理设置
         proxy_group = QGroupBox("代理设置")
@@ -352,19 +393,18 @@ class GitHubDownloaderGUI(QMainWindow):
 
         http_layout = QHBoxLayout()
         http_layout.addWidget(QLabel("HTTP代理:"))
-        self.global_proxy_http = QLineEdit()
+
         self.global_proxy_http.setPlaceholderText("例如: http://127.0.0.1:8080")
         http_layout.addWidget(self.global_proxy_http)
         proxy_layout.addLayout(http_layout)
 
         https_layout = QHBoxLayout()
         https_layout.addWidget(QLabel("HTTPS代理:"))
-        self.global_proxy_https = QLineEdit()
+
         self.global_proxy_https.setPlaceholderText("例如: https://127.0.0.1:8080")
         https_layout.addWidget(self.global_proxy_https)
         proxy_layout.addLayout(https_layout)
 
-        self.enable_proxy = QCheckBox("应用代理")
         self.enable_proxy.setChecked(True)
         proxy_layout.addWidget(self.enable_proxy)
 
@@ -376,19 +416,17 @@ class GitHubDownloaderGUI(QMainWindow):
         layout = QVBoxLayout(tab)
 
         # 基本信息
-        self.project_name = QLineEdit()
         self.project_name.setPlaceholderText("项目名称")
         layout.addWidget(QLabel("项目名称:"))
         layout.addWidget(self.project_name)
 
-        self.project_url = QLineEdit()
         self.project_url.setPlaceholderText("GitHub项目URL")
         layout.addWidget(QLabel("GitHub URL:"))
         layout.addWidget(self.project_url)
 
         # 输出路径
         output_layout = QHBoxLayout()
-        self.output_path = QLineEdit()
+
         self.output_path.setPlaceholderText("输出路径")
         output_layout.addWidget(self.output_path)
 
@@ -398,44 +436,28 @@ class GitHubDownloaderGUI(QMainWindow):
         layout.addWidget(QLabel("输出路径:"))
         layout.addLayout(output_layout)
 
-        # 日志文件路径
-        log_layout = QHBoxLayout()
-        self.log_path = QLineEdit()
-        self.log_path.setPlaceholderText("日志文件路径")
-        log_layout.addWidget(self.log_path)
-
-        log_browse_btn = QPushButton("浏览...")
-        log_browse_btn.clicked.connect(self.browse_log_path)
-        log_layout.addWidget(log_browse_btn)
-        layout.addWidget(QLabel("日志文件路径:"))
-        layout.addLayout(log_layout)
-
         # 操作类型
         layout.addWidget(QLabel("操作类型:"))
-        self.action_type = QComboBox()
         self.action_type.addItems(["download", "update"])
         layout.addWidget(self.action_type)
 
         # 其他选项
         options_layout = QHBoxLayout()
-        self.only_latest = QCheckBox("仅最新版本")
+
         self.only_latest.setChecked(True)
         options_layout.addWidget(self.only_latest)
 
-        self.ignore_ssl = QCheckBox("忽略SSL验证")
         options_layout.addWidget(self.ignore_ssl)
         layout.addLayout(options_layout)
 
         # 线程数
         layout.addWidget(QLabel("线程数:"))
-        self.threads = QComboBox()
         self.threads.addItems(["1", "2", "4", "8", "16"])
         self.threads.setCurrentIndex(2)  # 默认选择4线程
         layout.addWidget(self.threads)
 
         # 备注
         layout.addWidget(QLabel("备注:"))
-        self.remarks = QLineEdit()
         self.remarks.setPlaceholderText("项目描述/备注")
         layout.addWidget(self.remarks)
 
@@ -452,14 +474,12 @@ class GitHubDownloaderGUI(QMainWindow):
         # Cron表达式设置
         cron_layout = QHBoxLayout()
         cron_layout.addWidget(QLabel("Cron表达式:"))
-        self.cron_expression = QLineEdit()
         self.cron_expression.setPlaceholderText("例如: 0 9 * * * (每天9点)")
         self.cron_expression.textChanged.connect(self.update_next_executions)
         cron_layout.addWidget(self.cron_expression)
         schedule_layout.addLayout(cron_layout)
 
         # 下次执行时间显示
-        self.next_executions = QPlainTextEdit()
         self.next_executions.setReadOnly(True)
         self.next_executions.setMaximumHeight(100)
         schedule_layout.addWidget(QLabel("下次执行时间:"))
@@ -467,11 +487,10 @@ class GitHubDownloaderGUI(QMainWindow):
 
         # 定时任务控制按钮
         timer_btn_layout = QHBoxLayout()
-        self.start_timer_btn = QPushButton("启动定时")
+
         self.start_timer_btn.clicked.connect(self.start_timer)
         timer_btn_layout.addWidget(self.start_timer_btn)
 
-        self.stop_timer_btn = QPushButton("停止定时")
         self.stop_timer_btn.clicked.connect(self.stop_timer)
         self.stop_timer_btn.setEnabled(False)
         timer_btn_layout.addWidget(self.stop_timer_btn)
@@ -482,17 +501,15 @@ class GitHubDownloaderGUI(QMainWindow):
         project_layout = QVBoxLayout(project_group)
 
         # 项目列表（多选模式）
-        self.schedule_project_list = QListWidget()
         self.schedule_project_list.setSelectionMode(QListWidget.MultiSelection)
         project_layout.addWidget(self.schedule_project_list)
 
         # 选择控制按钮
         select_btn_layout = QHBoxLayout()
-        self.select_all_schedule_btn = QPushButton("全选")
+
         self.select_all_schedule_btn.clicked.connect(self.select_all_schedule_projects)
         select_btn_layout.addWidget(self.select_all_schedule_btn)
 
-        self.deselect_all_schedule_btn = QPushButton("取消选择")
         self.deselect_all_schedule_btn.clicked.connect(self.deselect_all_schedule_projects)
         select_btn_layout.addWidget(self.deselect_all_schedule_btn)
         project_layout.addLayout(select_btn_layout)
@@ -598,13 +615,6 @@ class GitHubDownloaderGUI(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "警告", f"无效的cron表达式: {str(e)}")
 
-    def calculate_next_delay(self, cron_expr: str) -> int:
-        """计算下次执行的延迟时间(毫秒)"""
-        now = datetime.now()
-        cron = croniter(cron_expr, now)
-        next_time = cron.get_next(datetime)
-        return int((next_time - now).total_seconds() * 1000)
-
     def stop_timer(self):
         """停止定时执行"""
         if self.timer.isActive():
@@ -613,6 +623,13 @@ class GitHubDownloaderGUI(QMainWindow):
             self.status_label.setText("定时任务已停止")
             self.start_timer_btn.setEnabled(True)
             self.stop_timer_btn.setEnabled(False)
+
+    def calculate_next_delay(self, cron_expr: str) -> int:
+        """计算下次执行的延迟时间(毫秒)"""
+        now = datetime.now()
+        cron = croniter(cron_expr, now)
+        next_time = cron.get_next(datetime)
+        return int((next_time - now).total_seconds() * 1000)
 
     def execute_scheduled_projects(self):
         """执行计划任务中选中的项目"""
@@ -654,6 +671,9 @@ class GitHubDownloaderGUI(QMainWindow):
             QMessageBox.warning(self, "警告", "请先勾选要执行的项目!")
             return
 
+        # 保存一下配置（因为我自己修改后，也经常性忘记点击保存配置）
+        self.save_config()
+
         configs = []
         for project in checked_projects:
             if project in self.config_manager.config:
@@ -676,11 +696,29 @@ class GitHubDownloaderGUI(QMainWindow):
     def execute_tasks(self, configs: List[Dict[str, Any]]):
         """执行任务"""
         if self.task_executor and self.task_executor.isRunning():
-            # QMessageBox.warning(self, "警告", "已有任务正在执行!")
             return
 
         self.log_display.clear()
         global_config = self.config_manager.get_global_config()
+
+        for config in configs:
+            # 再加上全局配置,应用到每个项目
+            if self.enable_proxy.isChecked():
+                proxies = {
+                    'http': self.global_proxy_http.text() if self.global_proxy_http.text() else None,
+                    'https': self.global_proxy_https.text() if self.global_proxy_https.text() else None
+                }
+                if not proxies.get('http') and not proxies.get('https'):
+                    proxies = None
+            else:
+                proxies = None
+            config['proxies'] = proxies
+            config['log_file'] = self.global_log_file.text() if self.global_log_file.text() else None
+            config['dingtalk_webhook'] = self.dingtalk_webhook.text() if self.dingtalk_webhook.text() else None
+            config['dingtalk_secret'] = self.dingtalk_secret.text() if self.dingtalk_secret.text() else None
+
+        # 执行前自动保存一下配置,因为我自己总是忘记
+        self.save_config()
 
         self.task_executor = TaskExecutor(configs, global_config)
         self.task_executor.task_complete.connect(self.handle_task_complete)
@@ -714,38 +752,6 @@ class GitHubDownloaderGUI(QMainWindow):
             self.status_label.setText("正在停止任务...")
             self.append_log("正在停止所有下载任务...")
 
-    def append_log(self, message: str):
-        """追加日志消息"""
-        self.log_display.appendPlainText(message)
-        scrollbar = self.log_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-
-    def load_config(self):
-        """加载配置文件"""
-        if os.path.exists(self.config_file):
-            try:
-                self.config_manager.config.read(self.config_file, encoding='utf-8')
-                self.update_project_list()
-                self.update_schedule_project_list()
-
-                # 加载全局设置
-                global_config = self.config_manager.get_global_config()
-                self.dingtalk_webhook.setText(global_config.get('dingtalk_webhook', ''))
-                self.dingtalk_secret.setText(global_config.get('dingtalk_secret', ''))
-                self.global_proxy_http.setText(global_config.get('proxies.http', ''))
-                self.global_proxy_https.setText(global_config.get('proxies.https', ''))
-                self.enable_proxy.setChecked(global_config.get('enable_proxy', 'true').lower() == 'true')
-                self.cron_expression.setText(global_config.get('cron_expression', ''))
-
-                # 如果配置中有定时任务设置，自动启动
-                if global_config.get('cron_expression'):
-                    self.start_timer()
-
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"加载配置文件失败: {str(e)}")
-        else:
-            self.config_manager.create_default_config()
-
     def update_project_list(self):
         """更新项目列表"""
         self.project_list.clear()
@@ -765,7 +771,6 @@ class GitHubDownloaderGUI(QMainWindow):
             self.project_name.setText(section)
             self.project_url.setText(project_data.get('url', ''))
             self.output_path.setText(project_data.get('output', ''))
-            self.log_path.setText(project_data.get('log', ''))
 
             action_type = project_data.get('action_type', 'download')
             if action_type in ["download", "update"]:
@@ -798,15 +803,12 @@ class GitHubDownloaderGUI(QMainWindow):
 
             self.config_manager.config[name] = {
                 'url': '',
-                'output': '',
+                'output': f'./output/{sanitize_filename(name, replacement_text='-')}',
                 'action_type': 'download',
                 'only_latest': 'true',
                 'threads': '4',
                 'ignore_ssl': 'false',
-                'proxies.http': '',
-                'proxies.https': '',
                 'remarks': '',
-                'log': ''
             }
 
             self.update_project_list()
@@ -831,6 +833,23 @@ class GitHubDownloaderGUI(QMainWindow):
             self.update_project_list()
             self.update_schedule_project_list()
 
+    def browse_global_log_path(self):
+        """浏览全局日志文件路径"""
+        # 默认为全局配置中的日志文件
+        current_path = self.global_log_file.text()
+        # 如果没有配置，则创建logs目录，然后设置显示对话框的 文件为 github_download.log
+        if not current_path or not os.path.exists(os.path.dirname(current_path)):
+            os.makedirs(os.path.join(self.app_path, 'logs'))
+            current_path = os.path.join(self.app_path, 'logs', 'github_download.log')
+
+        path, file = QFileDialog.getSaveFileName(
+            self, "选择日志文件", current_path,
+            filter="日志文件 (*.log);;所有文件 (*)",
+        )
+        if path:
+            self.global_log_file.setText(current_path)
+        return current_path
+
     def browse_output_path(self):
         """浏览输出路径"""
         current_path = self.output_path.text()
@@ -841,18 +860,38 @@ class GitHubDownloaderGUI(QMainWindow):
         if path:
             self.output_path.setText(path)
 
-    def browse_log_path(self):
-        """浏览日志文件路径"""
-        current_path = self.log_path.text()
-        if not current_path or not os.path.exists(os.path.dirname(current_path)):
-            current_path = os.path.join(self.app_path, 'logs')
+    def append_log(self, message: str):
+        """追加日志消息"""
+        self.log_display.appendPlainText(message)
+        scrollbar = self.log_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "选择日志文件", current_path,
-            filter="日志文件 (*.log);;所有文件 (*)"
-        )
-        if path:
-            self.log_path.setText(path)
+    def load_config(self):
+        """加载配置文件"""
+        if os.path.exists(self.config_file):
+            try:
+                self.config_manager.config.read(self.config_file, encoding='utf-8')
+                self.update_project_list()
+                self.update_schedule_project_list()
+
+                # 加载全局设置
+                global_config = self.config_manager.get_global_config()
+                self.dingtalk_webhook.setText(global_config.get('dingtalk_webhook', ''))
+                self.dingtalk_secret.setText(global_config.get('dingtalk_secret', ''))
+                self.global_proxy_http.setText(global_config.get('proxies.http', ''))
+                self.global_proxy_https.setText(global_config.get('proxies.https', ''))
+                self.enable_proxy.setChecked(global_config.get('enable_proxy', 'true').lower() == 'true')
+                self.cron_expression.setText(global_config.get('cron_expression', ''))
+                self.global_log_file.setText(global_config.get('log_file', ''))  # 加载全局日志文件配置
+
+                # 如果配置中有定时任务设置，自动启动
+                if global_config.get('cron_expression'):
+                    self.start_timer()
+
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"加载配置文件失败: {str(e)}")
+        else:
+            self.config_manager.create_default_config()
 
     def save_config(self):
         """保存配置"""
@@ -868,7 +907,7 @@ class GitHubDownloaderGUI(QMainWindow):
             self.config_manager.config['global']['proxies.https'] = self.global_proxy_https.text().strip()
             self.config_manager.config['global']['enable_proxy'] = 'true' if self.enable_proxy.isChecked() else 'false'
             self.config_manager.config['global']['cron_expression'] = self.cron_expression.text().strip()
-
+            self.config_manager.config['global']['log_file'] = self.global_log_file.text().strip()  # 保存全局日志文件配置
             # 保存计划任务项目选择
             scheduled_projects = ','.join(self.get_scheduled_projects())
             self.config_manager.config['global']['scheduled_projects'] = scheduled_projects
@@ -906,7 +945,6 @@ class GitHubDownloaderGUI(QMainWindow):
 
                 self.config_manager.config[section]['url'] = self.project_url.text().strip()
                 self.config_manager.config[section]['output'] = self.output_path.text().strip()
-                self.config_manager.config[section]['log'] = self.log_path.text().strip()
                 self.config_manager.config[section]['action_type'] = self.action_type.currentText().strip()
                 self.config_manager.config[section]['only_latest'] = 'true' if self.only_latest.isChecked() else 'false'
                 self.config_manager.config[section]['ignore_ssl'] = 'true' if self.ignore_ssl.isChecked() else 'false'

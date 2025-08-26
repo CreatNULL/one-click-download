@@ -7,3 +7,4 @@ dingtalkchatbot
 rich
 pyside6
 croniter
+pathvalidate
