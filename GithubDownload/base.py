@@ -1,21 +1,28 @@
 import os
 import re
+import shutil
+
+import dateutil
 import requests
 import hashlib
 import urllib3
 import logging
 import pefile
-import time
 import hmac
 import base64
+import sys
+import platform
+from datetime import datetime
+import time
+import pywintypes
+import win32file
+import win32con
 from abc import ABC, abstractmethod
 from urllib.parse import unquote, urlparse
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from urllib3.exceptions import InsecureRequestWarning
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-
-# 初始化colorama
 from colorama import Fore, Style, init
 init(autoreset=True)
 
@@ -30,6 +37,8 @@ from rich.progress import (
     TimeRemainingColumn,
     TextColumn
 )
+
+
 
 
 ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -459,6 +468,112 @@ class DownloaderBase(ABC):
             print(f"请求失败: {e}")
             return None
 
+    @staticmethod
+    def _convert_to_timestamp(time_input: Union[datetime, float, str]) -> float:
+        """
+        将各种时间格式转换为Unix时间戳
+
+        参数:
+            time_input: 接受以下格式：
+                - datetime对象
+                - Unix时间戳
+                - ISO 8601字符串（如：2024-10-08T01:24:03.000+08:00）
+                - 简单时间字符串（YYYY-MM-DD HH:MM:SS）
+
+        返回:
+            float: Unix时间戳
+
+        异常:
+            ValueError: 当输入格式不支持时抛出
+        """
+        if isinstance(time_input, datetime):
+            return time_input.timestamp()
+        elif isinstance(time_input, (int, float)):
+            return float(time_input)
+        elif isinstance(time_input, str):
+            try:
+                # 尝试解析ISO 8601格式
+                dt = dateutil.parser.isoparse(time_input)
+                return dt.timestamp()
+            except ValueError:
+                try:
+                    # 尝试解析简单格式
+                    dt = datetime.strptime(time_input, "%Y-%m-%d %H:%M:%S")
+                    return dt.timestamp()
+                except ValueError:
+                    raise ValueError("时间格式不支持，请使用ISO 8601或YYYY-MM-DD HH:MM:SS格式")
+        else:
+            raise ValueError("不支持的时间格式类型")
+
+    @staticmethod
+    def set_modification_time(file_path: str, modification_time: Union[datetime, float, str]) -> bool:
+        """
+        设置文件的修改时间
+
+        参数:
+            file_path: 文件路径
+            modification_time: 接受多种时间格式（由_convert_to_timestamp处理）
+
+        返回:
+            bool: 操作是否成功
+        """
+        try:
+            timestamp = DownloaderBase._convert_to_timestamp(modification_time)
+            current_system = platform.system()
+
+            if current_system == 'Windows':
+                import pywintypes
+                import win32file
+                import win32con
+
+                win32_time = pywintypes.Time(timestamp)
+                handle = win32file.CreateFile(
+                    file_path,
+                    win32file.GENERIC_WRITE,
+                    win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE | win32file.FILE_SHARE_DELETE,
+                    None,
+                    win32con.OPEN_EXISTING,
+                    0,
+                    None
+                )
+
+                try:
+                    ctime, atime, mtime = win32file.GetFileTime(handle)
+                    win32file.SetFileTime(handle, ctime, atime, win32_time)
+                finally:
+                    win32file.CloseHandle(handle)
+
+            elif current_system in ('Linux', 'Darwin'):
+                atime = os.path.getatime(file_path)
+                os.utime(file_path, (atime, timestamp))
+
+            else:
+                raise OSError(f"不支持的操作系统: {current_system}")
+
+            return True
+
+        except Exception as e:
+            logging.error(f"修改文件时间失败: {str(e)}")
+            return False
+
+    @staticmethod
+    def get_modification_time(file_path: str) -> Optional[datetime]:
+        """
+        获取文件的修改时间
+
+        参数:
+            file_path: 文件路径
+
+        返回:
+            datetime对象表示的修改时间，失败返回None
+        """
+        try:
+            mtime = os.path.getmtime(file_path)
+            return datetime.fromtimestamp(mtime)
+        except Exception as e:
+            logging.error(f"获取文件修改时间失败: {str(e)}")
+            return None
+
     def _generate_markdown(self, version_information: Dict[str, Any], file_output_path: str) -> None:
         """生成Markdown说明文件。"""
         version = version_information["file_version"]
@@ -522,15 +637,16 @@ class DownloaderBase(ABC):
             for download in version_information:
                 self._check_abort()
 
+                # 创建对应的版本目录
                 with self._project_lock:
                     version = download["file_version"]
                     file_output_path = os.path.join(self.output_path, version)
                     os.makedirs(file_output_path, exist_ok=True)
 
+                # 执行下载前的预处理，文件的校验等
                 with self._project_lock:
                     download_tasks = self._prepare_download_tasks(download, file_output_path)
 
-                # print(download_tasks)
                 if download_tasks:
                     self._execute_downloads(download_tasks, threads, chunk_size)
 
@@ -551,6 +667,8 @@ class DownloaderBase(ABC):
             file_hash = data.get("file_hash")
             file_url = data["file_url"]
             file_version = download["file_version"]
+            file_update_time = data["update_time"]
+            file_is_source_code = data["source_code"]
 
             if data['source_code']:
                 output_file = os.path.join(output_path, 'source', file_name)
@@ -562,10 +680,15 @@ class DownloaderBase(ABC):
                 if file_hash and not self.check_file(output_file, file_hash):
                     self._log('WARNING', f"文件 {file_name} 校验不通过，重新下载")
                 else:
-                    self._log('INFO', f"文件 {file_name} 通过，跳过下载")
-                    continue
+                    # 如果源码, 版本是最新的，且更新的时间发生了变动，则将任务也添加进去
+                    if (file_is_source_code and file_version == 'latest'
+                            and self._convert_to_timestamp(self.get_modification_time(output_file)) < self._convert_to_timestamp(data['update_time'])):
+                        self._log('INFO', f"源码文件 {file_name} 版本更新了")
+                    else:
+                        self._log('INFO', f"文件 {file_name} 通过，跳过下载")
+                        continue
 
-            tasks.append((file_url, output_file, file_name, file_version))
+            tasks.append((file_url, output_file, file_name, file_version, file_update_time, file_is_source_code))
         return tasks
 
     def _process_download_results(self, download: Dict, output_path: str):
@@ -615,11 +738,11 @@ class DownloaderBase(ABC):
             self._executor = ThreadPoolExecutor(max_workers=threads)
             with self._executor as executor:
                 futures = {}
-                for file_url, output_file, file_name, file_version in download_tasks:
+                for file_url, output_file, file_name, file_version, update_time, is_source_code in download_tasks:
                     self._check_abort()
                     future = executor.submit(
                         self._download_file,
-                        file_url, output_file, file_name, file_version, chunk_size
+                        file_url, output_file, file_name, file_version, update_time, is_source_code, chunk_size
                     )
                     futures[future] = file_name
 
@@ -639,7 +762,7 @@ class DownloaderBase(ABC):
         return success_count
 
     def _download_file(self, url: str, output_file: str,
-                       file_name: str, version: str, chunk_size: int = 8192) -> bool:
+                       file_name: str, version: str, update_time, is_source_code, chunk_size: int = 8192) -> bool:
         """下载单个文件"""
         task_id = self.progress.add_task("download", filename=file_name, start=False)
 
@@ -670,14 +793,29 @@ class DownloaderBase(ABC):
                         downloaded_size += len(chunk)
                         self.progress.update(task_id, advance=len(chunk))
 
+
+            # 处理特殊情况的 latest 版本的 (是最新版本，且更新时间发生了变化，且本地文件已经存在，且文件修改时间不一样)
+            if (is_source_code and version == 'latest' and os.path.exists(output_file) and
+                    self._convert_to_timestamp(self.get_modification_time(output_file)) < self._convert_to_timestamp(update_time)):
+                old_file_time = self.get_modification_time(output_file)
+                dst_dir = os.path.join(os.path.split(output_file)[0], 'history', str(self._convert_to_timestamp(old_file_time)))
+                self.logger.info(f"创建目录 {dst_dir} 存放历史版本")
+                os.makedirs(dst_dir, exist_ok=True)
+                self.logger.info(f"移动旧版本源码 -> {dst_dir}")
+                shutil.move(output_file, dst_dir)
+
+
             os.rename(temp_file, output_file)
+            # 下载的修改文件的修改时间为commit时间
+            self.set_modification_time(file_path=output_file, modification_time=self._convert_to_timestamp(update_time))
+
             self.progress.remove_task(task_id)
             return True
 
         except Exception as e:
             self.progress.stop()
             self._log('ERROR', f"下载文件 {file_name} 版本: {version} 失败: {str(e)}")
-            self._send_download_failure_notification(version, file_name, e)
+            self._send_download_failure_notification(version, file_name, str(e))
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise

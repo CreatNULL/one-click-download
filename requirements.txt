@@ -1,3 +1,6 @@
+python-dateutil
+colorama
+urllib3
 beautifulsoup4
 requests
 pefile

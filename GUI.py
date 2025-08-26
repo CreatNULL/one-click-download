@@ -83,6 +83,7 @@ class TaskExecutor(QThread):
 
     def run(self):
         """执行所有任务"""
+        print(self.max_workers)
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(self.execute_task, config): config
@@ -161,6 +162,7 @@ class ConfigManager:
             f.write("cron_expression = \n")
             f.write("scheduled_projects = \n")
             f.write("log_file = \n")
+            f.write("threads = \n")
 
     def get_global_config(self) -> Dict[str, str]:
         """获取全局配置"""
@@ -409,6 +411,12 @@ class GitHubDownloaderGUI(QMainWindow):
         proxy_layout.addWidget(self.enable_proxy)
 
         layout.addWidget(proxy_group)
+        # 线程数
+        layout.addWidget(QLabel("线程数:"))
+        self.threads.addItems(["1", "2", "4", "8", "16"])
+        self.threads.setCurrentIndex(2)  # 默认选择4线程
+        layout.addWidget(self.threads)
+
         layout.addStretch()
 
     def init_project_tab(self, tab):
@@ -449,12 +457,6 @@ class GitHubDownloaderGUI(QMainWindow):
 
         options_layout.addWidget(self.ignore_ssl)
         layout.addLayout(options_layout)
-
-        # 线程数
-        layout.addWidget(QLabel("线程数:"))
-        self.threads.addItems(["1", "2", "4", "8", "16"])
-        self.threads.setCurrentIndex(2)  # 默认选择4线程
-        layout.addWidget(self.threads)
 
         # 备注
         layout.addWidget(QLabel("备注:"))
@@ -717,10 +719,8 @@ class GitHubDownloaderGUI(QMainWindow):
             config['dingtalk_webhook'] = self.dingtalk_webhook.text() if self.dingtalk_webhook.text() else None
             config['dingtalk_secret'] = self.dingtalk_secret.text() if self.dingtalk_secret.text() else None
 
-        # 执行前自动保存一下配置,因为我自己总是忘记
-        self.save_config()
 
-        self.task_executor = TaskExecutor(configs, global_config)
+        self.task_executor = TaskExecutor(configs=configs, max_workers=int(self.threads.currentText()) if int(self.threads.currentText()) else 4)
         self.task_executor.task_complete.connect(self.handle_task_complete)
         self.task_executor.finished.connect(self.handle_tasks_finished)
 
@@ -728,6 +728,9 @@ class GitHubDownloaderGUI(QMainWindow):
         self.execute_all_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.status_label.setText("任务执行中...")
+
+        # 执行前自动保存一下配置,因为我自己总是忘记
+        self.save_config()
 
         self.task_executor.start()
 
@@ -779,10 +782,6 @@ class GitHubDownloaderGUI(QMainWindow):
             self.only_latest.setChecked(project_data.get('only_latest', 'true').lower() == 'true')
             self.ignore_ssl.setChecked(project_data.get('ignore_ssl', 'false').lower() == 'true')
 
-            threads = project_data.get('threads', '4')
-            if threads in ["1", "2", "4", "8", "16"]:
-                self.threads.setCurrentText(threads)
-
             self.remarks.setText(project_data.get('remarks', ''))
 
     def add_project(self):
@@ -806,7 +805,6 @@ class GitHubDownloaderGUI(QMainWindow):
                 'output': f'./output/{sanitize_filename(name, replacement_text='-')}',
                 'action_type': 'download',
                 'only_latest': 'true',
-                'threads': '4',
                 'ignore_ssl': 'false',
                 'remarks': '',
             }
@@ -883,6 +881,7 @@ class GitHubDownloaderGUI(QMainWindow):
                 self.enable_proxy.setChecked(global_config.get('enable_proxy', 'true').lower() == 'true')
                 self.cron_expression.setText(global_config.get('cron_expression', ''))
                 self.global_log_file.setText(global_config.get('log_file', ''))  # 加载全局日志文件配置
+                self.threads.setCurrentText(global_config.get('threads', '4'))
 
                 # 如果配置中有定时任务设置，自动启动
                 if global_config.get('cron_expression'):
@@ -908,6 +907,8 @@ class GitHubDownloaderGUI(QMainWindow):
             self.config_manager.config['global']['enable_proxy'] = 'true' if self.enable_proxy.isChecked() else 'false'
             self.config_manager.config['global']['cron_expression'] = self.cron_expression.text().strip()
             self.config_manager.config['global']['log_file'] = self.global_log_file.text().strip()  # 保存全局日志文件配置
+            self.config_manager.config['global']['threads'] = self.threads.currentText()
+
             # 保存计划任务项目选择
             scheduled_projects = ','.join(self.get_scheduled_projects())
             self.config_manager.config['global']['scheduled_projects'] = scheduled_projects

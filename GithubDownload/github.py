@@ -381,6 +381,7 @@ class GithubDownloader(DownloaderBase):
         result = []
         # 请求主页面
         main_page_info = self._analysis_main_page()
+
         if not main_page_info['exists_release']:
             return [{"file_version": "latest",
                      "about": main_page_info['about'],
@@ -454,7 +455,6 @@ class GithubDownloader(DownloaderBase):
 
         输出路径，如果不指定就使用类中指定的 self.github_output_path/version路径，否则就是指定的路径
         """
-        # 存储源文件
         self._output_download(version_information=version_information, threads=self.threads,)
 
 
