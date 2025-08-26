@@ -23,7 +23,7 @@
 
 ### (三)、输出目录
 版本/source/xxx.zip 对应主页的源码zip下载，版本/xxx.tat.gz 等对应release页面下的文件
-<img width="819" height="552" alt="image" src="https://github.com/user-attachments/assets/4f950b17-e68b-4637-bc93-6df66a49d85a" />
+<img width="462" height="241" alt="image" src="https://github.com/user-attachments/assets/91d3cee4-8c84-4663-aad8-b0fa413fe68d" />
 
 说明.md
 - 记录了版本信息
