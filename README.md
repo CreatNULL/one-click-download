@@ -1,10 +1,6 @@
 # one-click-download
 
 - 需要科学上网，不然访问GitHub会失败的。
-- 这个参数不用管他，对应requests的 verify=False/verify=True
-
-<img width="115" height="25" alt="image" src="https://github.com/user-attachments/assets/454f06c7-6a18-4cb9-b3cc-31e6db45beb6" />
-
 - 不要双击运。
 - 对于项目文件较大的，可能会看上去像是卡死了不执行。
 - 检测更新的逻辑仅仅是判断是否存在对应版本的目录，对于latest一直都是最新
