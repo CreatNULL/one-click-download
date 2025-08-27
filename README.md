@@ -25,10 +25,12 @@
 
 
 ## 三、新增项目
-<img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/65eee151-c86c-4ac9-a003-a86f2c33c5f3" />
+<img width="1750" height="875" alt="image" src="https://github.com/user-attachments/assets/a3c833c5-9f32-4ea8-914e-b5f3ccfab37e" />
+
 
 ## 四、执行多选
-<img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/d590ded2-34f3-4877-a8b2-47a7de285878" />
+<img width="1750" height="875" alt="image" src="https://github.com/user-attachments/assets/f6b926e8-c672-4859-8cf3-1c8ef9569c3f" />
+
 
 ### (三)、输出目录
 版本/source/xxx.zip 对应主页的源码zip下载，版本/xxx.tat.gz 等对应release页面下的文件
@@ -54,7 +56,7 @@
 
 
 ## (六)、钉钉发送通知
-<img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/f63c35b4-ddf7-436a-b41f-f349051e7b30" />
+<img width="1750" height="875" alt="image" src="https://github.com/user-attachments/assets/55491341-2942-4f2d-a45c-7e08a72fa966" />
 
 ### 下载
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/7b825102-f327-4df5-932b-be1bcf4fda12" />
@@ -100,7 +102,7 @@
 
 2025年8月27日-07点47分-修复
 - 对于只有latest没有release的项目，即只有源码的项目，对于是否存在新版本，存在判断逻辑存在问题，修复： 首次下载后修改文件的修改时间为commit的时间，下次访问对比这个时间和commit时间，发生变动则下载，历史的版本移动到./history/commit时间戳/xxx.zip
-- 发现线程数设置有问题。直接改为全局的配置而不是单独项目。
+- 发现线程数设置有问题。修改，改为全局配置，单个项目的线程数固定值4 ，这个设置的代表的是同时执行几个项目下载。
 
 2025年8月27日-22点31分-修复
 - 没有指定日志的时候日志文件为 ./logs/github_download.log
