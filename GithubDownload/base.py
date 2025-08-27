@@ -51,6 +51,7 @@ class DingTalkNotifier:
         self.webhook_url = webhook_url
         self.secret = secret
         self.enabled = bool(webhook_url)
+
         if self.enabled:
             from dingtalkchatbot.chatbot import DingtalkChatbot
             self.chatbot = DingtalkChatbot(webhook_url, secret)
@@ -287,6 +288,7 @@ class DownloaderBase(ABC):
 
     def _send_dingtalk_alert(self, title: str, message: str, msg_type: str = 'info') -> None:
         """发送钉钉告警。"""
+        self.logger.info(f"发送钉钉消息: 标题: {title}, 信息: {msg_type}")
         if not message and not title:
             self.logger.warning("⚠空标题，空消息，跳过发送")
             return
@@ -311,7 +313,7 @@ class DownloaderBase(ABC):
             message = f"### \n\n{message}\n\n"
         self.dingtalk_notifier.send_message(title, message)
 
-    def _send_download_success_notification(self, version: str, file_count: int) -> None:
+    def _send_download_success_notification(self, version: str, file_count: str) -> None:
         """发送下载成功通知。"""
         self.console.print(f"[bold green]✓ {self.project_name} 下载成功[/]")
         self.console.print(f"版本: [cyan]{version}[/]")
@@ -706,7 +708,7 @@ class DownloaderBase(ABC):
                 success_count += 1
 
         self._generate_markdown(download, output_path)
-        self._send_download_success_notification(version, total_count)
+        self._send_download_success_notification(version, f"{success_count} / {total_count}")
 
         self.logger.info(f"成功下载 {success_count} / {total_count} 个文件")
 

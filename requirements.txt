@@ -11,3 +11,4 @@ rich
 pyside6
 croniter
 pathvalidate
+pywin32

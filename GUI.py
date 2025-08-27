@@ -2,6 +2,7 @@ import sys
 import os
 import re
 import time
+import shutil
 import logging
 import configparser
 import concurrent.futures
@@ -83,7 +84,6 @@ class TaskExecutor(QThread):
 
     def run(self):
         """执行所有任务"""
-        print(self.max_workers)
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(self.execute_task, config): config
@@ -117,7 +117,7 @@ class TaskExecutor(QThread):
                 dingtalk_secret=config['dingtalk_secret'],
                 project_name=project_name,
                 only_latest=config['only_latest'],
-                threads=config['threads'],
+                threads=4,
                 log_file=config['log_file'],
                 verify=not config['ignore_ssl'],
                 proxies=config['proxies'],
@@ -673,9 +673,6 @@ class GitHubDownloaderGUI(QMainWindow):
             QMessageBox.warning(self, "警告", "请先勾选要执行的项目!")
             return
 
-        # 保存一下配置（因为我自己修改后，也经常性忘记点击保存配置）
-        self.save_config()
-
         configs = []
         for project in checked_projects:
             if project in self.config_manager.config:
@@ -701,7 +698,9 @@ class GitHubDownloaderGUI(QMainWindow):
             return
 
         self.log_display.clear()
-        global_config = self.config_manager.get_global_config()
+        # 执行前自动保存一下配置,因为我自己总是忘记
+        if not self.save_config():
+            return
 
         for config in configs:
             # 再加上全局配置,应用到每个项目
@@ -719,7 +718,6 @@ class GitHubDownloaderGUI(QMainWindow):
             config['dingtalk_webhook'] = self.dingtalk_webhook.text() if self.dingtalk_webhook.text() else None
             config['dingtalk_secret'] = self.dingtalk_secret.text() if self.dingtalk_secret.text() else None
 
-
         self.task_executor = TaskExecutor(configs=configs, max_workers=int(self.threads.currentText()) if int(self.threads.currentText()) else 4)
         self.task_executor.task_complete.connect(self.handle_task_complete)
         self.task_executor.finished.connect(self.handle_tasks_finished)
@@ -728,9 +726,6 @@ class GitHubDownloaderGUI(QMainWindow):
         self.execute_all_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.status_label.setText("任务执行中...")
-
-        # 执行前自动保存一下配置,因为我自己总是忘记
-        self.save_config()
 
         self.task_executor.start()
 
@@ -827,25 +822,32 @@ class GitHubDownloaderGUI(QMainWindow):
 
         if reply == QMessageBox.StandardButton.Yes:
             section = current_item.text()
-            self.config_manager.config.remove_section(section)
-            self.update_project_list()
-            self.update_schedule_project_list()
+            try:
+                if os.path.exists(self.config_manager.config[section]['output']):
+                    shutil.rmtree(self.config_manager.config[section]['output'])
+                self.config_manager.config.remove_section(section)
+            except Exception as e:
+                self.append_log(f'删除{section}项目失败: {str(e)}')
+                return
 
-    def browse_global_log_path(self):
+        self.update_project_list()
+        self.update_schedule_project_list()
+
+    def browse_global_log_path(self,):
         """浏览全局日志文件路径"""
         # 默认为全局配置中的日志文件
         current_path = self.global_log_file.text()
         # 如果没有配置，则创建logs目录，然后设置显示对话框的 文件为 github_download.log
-        if not current_path or not os.path.exists(os.path.dirname(current_path)):
-            os.makedirs(os.path.join(self.app_path, 'logs'))
+        if not current_path:
+            os.makedirs(os.path.join(self.app_path, 'logs'), exist_ok=True)
             current_path = os.path.join(self.app_path, 'logs', 'github_download.log')
 
         path, file = QFileDialog.getSaveFileName(
-            self, "选择日志文件", current_path,
-            filter="日志文件 (*.log);;所有文件 (*)",
-        )
-        if path:
-            self.global_log_file.setText(current_path)
+                self, "选择日志文件", current_path,
+                filter="日志文件 (*.log);;所有文件 (*)",
+            )
+        current_path = path
+
         return current_path
 
     def browse_output_path(self):
@@ -880,7 +882,7 @@ class GitHubDownloaderGUI(QMainWindow):
                 self.global_proxy_https.setText(global_config.get('proxies.https', ''))
                 self.enable_proxy.setChecked(global_config.get('enable_proxy', 'true').lower() == 'true')
                 self.cron_expression.setText(global_config.get('cron_expression', ''))
-                self.global_log_file.setText(global_config.get('log_file', ''))  # 加载全局日志文件配置
+                self.global_log_file.setText(global_config.get('log_file') if global_config.get('log_file') else './logs/github_download.log')  # 加载全局日志文件配置
                 self.threads.setCurrentText(global_config.get('threads', '4'))
 
                 # 如果配置中有定时任务设置，自动启动
@@ -893,79 +895,155 @@ class GitHubDownloaderGUI(QMainWindow):
             self.config_manager.create_default_config()
 
     def save_config(self):
-        """保存配置"""
+        """保存配置（完整修复版本）"""
         try:
-            # 确保有global部分
-            if not self.config_manager.config.has_section('global'):
-                self.config_manager.config.add_section('global')
-
-            # 保存全局设置
-            self.config_manager.config['global']['dingtalk_webhook'] = self.dingtalk_webhook.text().strip()
-            self.config_manager.config['global']['dingtalk_secret'] = self.dingtalk_secret.text().strip()
-            self.config_manager.config['global']['proxies.http'] = self.global_proxy_http.text().strip()
-            self.config_manager.config['global']['proxies.https'] = self.global_proxy_https.text().strip()
-            self.config_manager.config['global']['enable_proxy'] = 'true' if self.enable_proxy.isChecked() else 'false'
-            self.config_manager.config['global']['cron_expression'] = self.cron_expression.text().strip()
-            self.config_manager.config['global']['log_file'] = self.global_log_file.text().strip()  # 保存全局日志文件配置
-            self.config_manager.config['global']['threads'] = self.threads.currentText()
-
-            # 保存计划任务项目选择
-            scheduled_projects = ','.join(self.get_scheduled_projects())
-            self.config_manager.config['global']['scheduled_projects'] = scheduled_projects
-
-            # 保存当前项目设置
+            # 保存前记录当前选中状态
+            selected_items = [item.text() for item in self.project_list.selectedItems()]
             current_item = self.project_list.currentItem()
+            current_item_text = current_item.text() if current_item else None
+
+            # 执行保存逻辑
+            if not self._validate_before_save():
+                return False
+
+            # 保存全局配置
+            self._save_global_settings()
+
+            # 保存当前项目配置
             if current_item:
-                old_section = current_item.text().strip()
-                new_section = self.project_name.text().strip()
+                self._save_current_project(current_item)
 
-                # 检查项目名称是否被修改
-                if old_section != new_section:
-                    if not new_section:
-                        QMessageBox.warning(self, "警告", "项目名称不能为空!")
-                        return
-
-                    if new_section in self.config_manager.config and new_section != old_section:
-                        QMessageBox.warning(self, "警告", "项目名称已存在!")
-                        return
-
-                    # 复制旧项目配置到新项目
-                    if old_section in self.config_manager.config:
-                        self.config_manager.config[new_section] = {}
-                        for key, value in self.config_manager.config[old_section].items():
-                            self.config_manager.config[new_section][key] = value.strip() if isinstance(value, str) else value
-
-                        # 删除旧项目
-                        self.config_manager.config.remove_section(old_section)
-                        current_item.setText(new_section)
-
-                # 更新当前项目配置
-                section = new_section
-                if not self.config_manager.config.has_section(section):
-                    self.config_manager.config.add_section(section)
-
-                self.config_manager.config[section]['url'] = self.project_url.text().strip()
-                self.config_manager.config[section]['output'] = self.output_path.text().strip()
-                self.config_manager.config[section]['action_type'] = self.action_type.currentText().strip()
-                self.config_manager.config[section]['only_latest'] = 'true' if self.only_latest.isChecked() else 'false'
-                self.config_manager.config[section]['ignore_ssl'] = 'true' if self.ignore_ssl.isChecked() else 'false'
-                self.config_manager.config[section]['threads'] = self.threads.currentText().strip()
-                self.config_manager.config[section]['remarks'] = self.remarks.text().strip()
-
-            # 写入文件
+            # 写入配置文件
             self.config_manager.save_config()
 
-            # 保存后刷新GUI显示
-            self.refresh_ui()
+            # 刷新UI并恢复选中状态
+            self._refresh_ui_with_selection(selected_items, current_item_text)
 
-            # 如果cron表达式有变化，重新设置定时器
-            if self.timer.isActive():
-                self.stop_timer()
-            if self.cron_expression.text().strip():
-                self.start_timer()
+            # 处理定时任务
+            self._handle_timer_after_save()
 
+            return True
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
+            return False
+
+    def _validate_before_save(self):
+        """保存前的验证"""
+        if not self.project_url.text().strip():
+            QMessageBox.critical(self, "错误", "GitHub项目URL不能为空")
+            return False
+
+        if not self.project_url.text().strip().startswith('https://github.com/'):
+            QMessageBox.critical(self, "错误", "GitHub项目URL格式错误")
+            return False
+
+        if self.global_proxy_http.text() and not self.global_proxy_http.text().startswith('http'):
+            QMessageBox.critical(self, "错误", "代理格式错误")
+            return False
+
+        if self.global_proxy_https.text().strip() and not self.global_proxy_https.text().startswith('http'):
+            QMessageBox.critical(self, "错误", "代理格式错误")
+            return False
+
+        if self.dingtalk_webhook.text() and not self.dingtalk_webhook.text().strip().startswith('https://oapi.dingtalk.com/robot/'):
+            QMessageBox.critical(self, "错误", "钉钉webhookURL格式错误")
+            return False
+
+        if self.dingtalk_webhook.text() and not self.dingtalk_secret.text().strip():
+            QMessageBox.critical(self, "错误", "钉钉secret不能为空")
+            return False
+
+        return True
+
+    def _save_global_settings(self):
+        """保存全局设置"""
+        if not self.config_manager.config.has_section('global'):
+            self.config_manager.config.add_section('global')
+
+
+        self.config_manager.config['global'].update({
+            'dingtalk_webhook': self.dingtalk_webhook.text().strip(),
+            'dingtalk_secret': self.dingtalk_secret.text().strip(),
+            'proxies.http': self.global_proxy_http.text().strip(),
+            'proxies.https': self.global_proxy_https.text().strip(),
+            'enable_proxy': 'true' if self.enable_proxy.isChecked() else 'false',
+            'cron_expression': self.cron_expression.text().strip(),
+            'log_file': self.global_log_file.text().strip(),
+            'threads': self.threads.currentText(),
+            'scheduled_projects': ','.join(self.get_scheduled_projects())
+        })
+
+    def _save_current_project(self, current_item):
+        """保存当前项目配置"""
+        old_section = current_item.text().strip()
+        new_section = self.project_name.text().strip()
+
+        # 处理项目重命名
+        if old_section != new_section:
+            if not new_section:
+                raise ValueError("项目名称不能为空")
+
+            if new_section in self.config_manager.config and new_section != old_section:
+                raise ValueError("项目名称已存在")
+
+            # 复制旧配置到新项目
+            if old_section in self.config_manager.config:
+                self.config_manager.config[new_section] = dict(self.config_manager.config[old_section])
+                self.config_manager.config.remove_section(old_section)
+                current_item.setText(new_section)
+
+        # 更新项目配置
+        section = new_section
+        if not self.config_manager.config.has_section(section):
+            self.config_manager.config.add_section(section)
+
+        self.config_manager.config[section].update({
+            'url': self.project_url.text().strip(),
+            'output': self.output_path.text().strip(),
+            'action_type': self.action_type.currentText().strip(),
+            'only_latest': 'true' if self.only_latest.isChecked() else 'false',
+            'ignore_ssl': 'true' if self.ignore_ssl.isChecked() else 'false',
+            'remarks': self.remarks.text().strip()
+        })
+
+    def _refresh_ui_with_selection(self, selected_items, current_item_text):
+        """刷新UI并恢复选中状态"""
+        # 重新加载配置
+        self.load_config()
+
+        # 更新项目列表
+        self.update_project_list()
+        self.update_schedule_project_list()
+
+        # 恢复选中状态
+        self._restore_selection(selected_items, current_item_text)
+
+        # 更新其他UI元素
+        self.update_next_executions()
+        self.highlight_schedule_projects()
+
+    def _restore_selection(self, selected_items, current_item_text):
+        """恢复选中状态"""
+        # 恢复多选状态
+        for i in range(self.project_list.count()):
+            item = self.project_list.item(i)
+            if item.text() in selected_items:
+                item.setSelected(True)
+
+        # 恢复当前选中项
+        if current_item_text:
+            for i in range(self.project_list.count()):
+                if self.project_list.item(i).text() == current_item_text:
+                    self.project_list.setCurrentRow(i)
+                    self.load_project_data(self.project_list.item(i), None)
+                    break
+
+    def _handle_timer_after_save(self):
+        """保存后处理定时任务"""
+        if self.timer.isActive():
+            self.stop_timer()
+        if self.cron_expression.text().strip():
+            self.start_timer()
 
     def refresh_ui(self):
         """刷新UI显示"""
@@ -989,19 +1067,39 @@ class GitHubDownloaderGUI(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件处理"""
+        # 检查是否有正在执行的任务
         if self.task_executor and self.task_executor.isRunning():
             reply = QMessageBox.question(
                 self, '确认关闭',
                 '有任务正在执行，确定要关闭窗口吗?',
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
 
-        self.output_redirector.restore()
-        self.save_config()
-        event.accept()
+        # 尝试保存配置
+        try:
+            if not self.save_config():
+                # 如果保存失败，询问用户是否继续关闭
+                # reply = QMessageBox.question(
+                #     self, '保存失败',
+                #     '配置保存失败，确定要继续关闭窗口吗?',
+                #     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                #     QMessageBox.StandardButton.No
+                # )
+                # if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
+
+            # 恢复标准输出
+            self.output_redirector.restore()
+            event.accept()
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"关闭窗口时发生错误: {str(e)}")
+            event.ignore()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

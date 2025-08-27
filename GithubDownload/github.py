@@ -116,8 +116,9 @@ class GithubDownloader(DownloaderBase):
         result = []
 
         # 请求第一个tags页面
+        tags_url = urljoin(self.url, "tags")
         try:
-            response = requests.get(urljoin(self.url, "tags"), **self.kwargs)
+            response = requests.get(tags_url, **self.kwargs)
             response.raise_for_status()
 
 
@@ -164,7 +165,8 @@ class GithubDownloader(DownloaderBase):
                     next_after_version = self.__get_next_page(next_page_soup) # 下一页的下一页版本信息和访问链接
                 return result
         except Exception as e:
-            self.logger.error(f"解析 tags 页面失败: {urljoin(self.url, 'tags')}, 错误信息: {str(e)}")
+            self.logger.error(f"解析 {self.project_name} tags 页面失败: URL: {urljoin(self.url, 'tags')}, 错误信息: {str(e)}")
+            self._send_other_msg(title=f"解析 {self.project_name} tags 页面失败", message=f"URL: {tags_url}, 错误信息: {str(e)}", msg_type='error')
             raise
 
     # 解析主页面
