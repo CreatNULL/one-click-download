@@ -894,24 +894,113 @@ class GitHubDownloaderGUI(QMainWindow):
         else:
             self.config_manager.create_default_config()
 
+    def _validate_before_save(self):
+        """保存前的验证 - 验证所有项目（包含当前编辑的项目）"""
+        errors = []
+
+        # 验证全局设置
+        if self.dingtalk_webhook.text() and not self.dingtalk_webhook.text().strip().startswith('https://oapi.dingtalk.com/robot/'):
+            errors.append("钉钉webhookURL格式错误")
+
+        if self.dingtalk_webhook.text() and not self.dingtalk_secret.text().strip():
+            errors.append("钉钉secret不能为空")
+
+        if self.global_proxy_http.text() and not self.global_proxy_http.text().startswith('http'):
+            errors.append("HTTP代理格式错误")
+
+        if self.global_proxy_https.text() and not self.global_proxy_https.text().startswith('http'):
+            errors.append("HTTPS代理格式错误")
+
+        # 获取当前编辑的项目数据（如果有）
+        current_project = None
+        if self.project_list.currentItem():
+            current_project = {
+                'name': self.project_name.text(),
+                'url': self.project_url.text(),
+                'output': self.output_path.text(),
+                'action_type': self.action_type.currentText(),
+                'only_latest': 'true' if self.only_latest.isChecked() else 'false',
+                'ignore_ssl': 'true' if self.ignore_ssl.isChecked() else 'false'
+            }
+
+        # 验证所有项目
+        for section in self.config_manager.config.sections():
+            if section == 'global':
+                continue
+
+            # 如果是当前编辑的项目，使用界面上的最新值
+            if current_project and section == current_project['name']:
+                project_data = current_project
+            else:
+                project_data = dict(self.config_manager.config[section])
+
+            # 验证项目URL
+            if not project_data.get('url'):
+                errors.append(f"项目 {section} 的GitHub URL不能为空")
+                continue
+
+            if not project_data.get('url').startswith('https://github.com/'):
+                errors.append(f"项目 {section} 的GitHub URL格式错误")
+
+            # 验证输出路径
+            if not project_data.get('output'):
+                errors.append(f"项目 {section} 的输出路径不能为空")
+
+            # 验证操作类型
+            action_type = project_data.get('action_type', 'download')
+            if action_type not in ['download', 'update']:
+                errors.append(f"项目 {section} 的操作类型无效")
+
+        if errors:
+            QMessageBox.critical(
+                self,
+                "验证错误",
+                "发现以下配置问题:\n\n• " + "\n• ".join(errors)
+            )
+            return False
+
+        return True
+
     def save_config(self):
-        """保存配置（完整修复版本）"""
+        """保存配置（优化版本）"""
         try:
             # 保存前记录当前选中状态
             selected_items = [item.text() for item in self.project_list.selectedItems()]
             current_item = self.project_list.currentItem()
             current_item_text = current_item.text() if current_item else None
 
-            # 执行保存逻辑
+            # 执行保存前的验证（包含当前编辑的项目）
             if not self._validate_before_save():
                 return False
 
             # 保存全局配置
             self._save_global_settings()
 
-            # 保存当前项目配置
-            if current_item:
-                self._save_current_project(current_item)
+            # 保存所有项目配置（包含当前编辑的项目）
+            for section in self.config_manager.config.sections():
+                if section == 'global':
+                    continue
+
+                # 如果是当前编辑的项目，使用界面上的最新值
+                if current_item and section == current_item.text():
+                    self.config_manager.config[section].update({
+                        'url': self.project_url.text().strip(),
+                        'output': self.output_path.text().strip(),
+                        'action_type': self.action_type.currentText(),
+                        'only_latest': 'true' if self.only_latest.isChecked() else 'false',
+                        'ignore_ssl': 'true' if self.ignore_ssl.isChecked() else 'false',
+                        'remarks': self.remarks.text().strip()
+                    })
+                else:
+                    # 保持其他项目原有配置
+                    self.config_manager.config[section].update({
+                        'url': self.config_manager.config[section].get('url', ''),
+                        'output': self.config_manager.config[section].get('output', ''),
+                        'action_type': self.config_manager.config[section].get('action_type', 'download'),
+                        'only_latest': self.config_manager.config[section].get('only_latest', 'true'),
+                        'ignore_ssl': self.config_manager.config[section].get('ignore_ssl', 'false'),
+                        'remarks': self.config_manager.config[section].get('remarks', '')
+                    })
 
             # 写入配置文件
             self.config_manager.save_config()
@@ -927,33 +1016,6 @@ class GitHubDownloaderGUI(QMainWindow):
             QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
             return False
 
-    def _validate_before_save(self):
-        """保存前的验证"""
-        if not self.project_url.text().strip():
-            QMessageBox.critical(self, "错误", "GitHub项目URL不能为空")
-            return False
-
-        if not self.project_url.text().strip().startswith('https://github.com/'):
-            QMessageBox.critical(self, "错误", "GitHub项目URL格式错误")
-            return False
-
-        if self.global_proxy_http.text() and not self.global_proxy_http.text().startswith('http'):
-            QMessageBox.critical(self, "错误", "代理格式错误")
-            return False
-
-        if self.global_proxy_https.text().strip() and not self.global_proxy_https.text().startswith('http'):
-            QMessageBox.critical(self, "错误", "代理格式错误")
-            return False
-
-        if self.dingtalk_webhook.text() and not self.dingtalk_webhook.text().strip().startswith('https://oapi.dingtalk.com/robot/'):
-            QMessageBox.critical(self, "错误", "钉钉webhookURL格式错误")
-            return False
-
-        if self.dingtalk_webhook.text() and not self.dingtalk_secret.text().strip():
-            QMessageBox.critical(self, "错误", "钉钉secret不能为空")
-            return False
-
-        return True
 
     def _save_global_settings(self):
         """保存全局设置"""

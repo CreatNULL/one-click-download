@@ -324,6 +324,21 @@ class DownloaderBase(ABC):
                    f"**下载时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}</br>")
         self._send_dingtalk_alert(title, message, msg_type='success')
 
+    def _send_download_warning_notification(self, version: str, file_count: str) -> None:
+        """发送下载成功通知。"""
+        self.console.print(f"[bold yellow]⚠ {self.project_name} 部分下载成功[/]")
+        self.console.print(f"版本: [cyan]{version}[/]")
+        self.console.print(f"文件数量: [yellow]{file_count}[/]")
+        self.console.print(f"下载时间: [magenta]{time.strftime('%Y-%m-%d %H:%M:%S')}[/]")
+
+        # 同时发送钉钉通知
+        title = f"{self.project_name} 部分下载成功"
+        message = (f"**项目**: {self.project_name}\n\n"
+                   f"**版本**: {version}</br>\n\n"
+                   f"**文件数量**: {file_count}</br>\n\n"
+                   f"**下载时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}</br>")
+        self._send_dingtalk_alert(title, message, msg_type='warning')
+
     def _send_download_failure_notification(self, version: str, file_name: str, error: str) -> None:
         """发送下载失败通知。"""
         self.console.print(f"[bold red]✗ {self.project_name} 下载失败[/]")
@@ -713,9 +728,12 @@ class DownloaderBase(ABC):
                 success_count += 1
 
         self._generate_markdown(download, output_path)
-        self._send_download_success_notification(version, f"{success_count} / {total_count}")
-
-        self.logger.info(f"成功下载 {success_count} / {total_count} 个文件")
+        if success_count == total_count:
+            self._send_download_success_notification(version, f"{success_count} / {total_count}")
+            self.logger.info(f"{self.project_name} 下载成功 {success_count} / {total_count} 个文件")
+        else:
+            self._send_download_warning_notification(version, f"{success_count} / {total_count}")
+            self.logger.warning(f"{self.project_name} 部分下载成功下载 {success_count} / {total_count} 个文件")
 
     def stop_download(self):
         """安全停止所有下载线程"""
