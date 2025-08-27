@@ -843,9 +843,9 @@ class GitHubDownloaderGUI(QMainWindow):
             current_path = os.path.join(self.app_path, 'logs', 'github_download.log')
 
         path, file = QFileDialog.getSaveFileName(
-                self, "选择日志文件", current_path,
-                filter="日志文件 (*.log);;所有文件 (*)",
-            )
+            self, "选择日志文件", current_path,
+            filter="日志文件 (*.log);;所有文件 (*)",
+        )
         current_path = path
 
         return current_path

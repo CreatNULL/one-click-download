@@ -65,7 +65,7 @@ class DingTalkNotifier:
             is_at_all: 是否@所有人
 
         Returns:
-            bool: 是否发送成功
+            bool: 是否发送成功update
         """
         if not self.enabled:
             return False
@@ -273,10 +273,6 @@ class DownloaderBase(ABC):
         """获取当前日志文件名"""
         return self.log_filename
 
-    def _log(self, level: str, message: str):
-        """统一日志记录方法"""
-        self.logger.log(getattr(logging, level), message)
-
     def _check_abort(self):
         """检查是否请求中止"""
         if self._abort_flag:
@@ -288,7 +284,7 @@ class DownloaderBase(ABC):
 
     def _send_dingtalk_alert(self, title: str, message: str, msg_type: str = 'info') -> None:
         """发送钉钉告警。"""
-        self.logger.info(f"发送钉钉消息: 标题: {title}, 信息: {msg_type}")
+        self.logger.info(f"发送钉钉消息: 标题: {title}, 信息: {message}")
         if not message and not title:
             self.logger.warning("⚠空标题，空消息，跳过发送")
             return
@@ -617,17 +613,26 @@ class DownloaderBase(ABC):
                     continue
 
                 version_path = os.path.join(self.output_path, version)
+
+                # 版本路径不存在 - 直接判断为存在新的版本
                 if not os.path.exists(version_path):
                     new_versions.append(version_info)
-
+                else:
+                    # 版本路路径存在，检测内部文件（检测其余版本的本的无意义，因为通过是否存在版本路径，即可判断是否存在新版本）
+                    if version == 'latest':
+                        for data in version_info['data']:
+                            output_file = os.path.join(version_path, data['file_name'])
+                            # 已经存在，检测版本 (只要检测到一个文件存在新的版本，就判定为存在新的版本）
+                            if os.path.exists(output_file):
+                                if self._convert_to_timestamp(self.get_modification_time(output_file)) < self._convert_to_timestamp(data['update_time']):
+                                    new_versions.append(version_info)
+                                    break
             if new_versions:
                 self.console.print(f"[green]✓ 发现 {len(new_versions)} 个新版本[/]")
                 self._send_update_notification(new_versions)
             else:
                 self.console.print("[yellow]✓ 未发现新版本[/]")
-
             return new_versions
-
         except Exception as e:
             self.console.print(f"[red]✗ 检查更新失败: {e}[/]")
             self._send_dingtalk_alert(f"{self.project_name} - 检查更新失败", f"检查更新失败: {e}")
@@ -656,7 +661,7 @@ class DownloaderBase(ABC):
                         self._process_download_results(download, file_output_path)
 
         except Exception as e:
-            self._log('ERROR', f"下载过程中出错: {str(e)}")
+            self.logger.error(f"下载过程中出错: {str(e)}")
             raise
 
     def _prepare_download_tasks(self, download: Dict, output_path: str) -> List[tuple]:
@@ -680,14 +685,14 @@ class DownloaderBase(ABC):
 
             if os.path.exists(output_file):
                 if file_hash and not self.check_file(output_file, file_hash):
-                    self._log('WARNING', f"文件 {file_name} 校验不通过，重新下载")
+                    self.logger.warning(f"文件 {file_name} 校验不通过，重新下载")
                 else:
-                    # 如果源码, 版本是最新的，且更新的时间发生了变动，则将任务也添加进去
-                    if (file_is_source_code and file_version == 'latest'
+                    # 版本是最新的，且更新的时间发生了变动，则将任务也添加进去
+                    if (file_version == 'latest'
                             and self._convert_to_timestamp(self.get_modification_time(output_file)) < self._convert_to_timestamp(data['update_time'])):
-                        self._log('INFO', f"源码文件 {file_name} 版本更新了")
+                        self.logger.info(f"源码文件 {file_name} 版本更新了")
                     else:
-                        self._log('INFO', f"文件 {file_name} 通过，跳过下载")
+                        self.logger.info(f"文件 {file_name} 通过，跳过下载")
                         continue
 
             tasks.append((file_url, output_file, file_name, file_version, file_update_time, file_is_source_code))
@@ -755,9 +760,9 @@ class DownloaderBase(ABC):
                         if future.result():
                             with lock:
                                 success_count += 1
-                            self._log('INFO', f"文件 {file_name} 下载成功")
+                            self.logger.info(f"文件 {file_name} 下载成功")
                     except Exception as e:
-                        self._log('ERROR', f"文件 {file_name} 下载失败: {str(e)}")
+                        self.logger.error(f"文件 {file_name} 下载失败: {str(e)}")
 
         # 清除executor引用
         self._executor = None
@@ -797,13 +802,13 @@ class DownloaderBase(ABC):
 
 
             # 处理特殊情况的 latest 版本的 (是最新版本，且更新时间发生了变化，且本地文件已经存在，且文件修改时间不一样)
-            if (is_source_code and version == 'latest' and os.path.exists(output_file) and
+            if (version == 'latest' and os.path.exists(output_file) and
                     self._convert_to_timestamp(self.get_modification_time(output_file)) < self._convert_to_timestamp(update_time)):
                 old_file_time = self.get_modification_time(output_file)
                 dst_dir = os.path.join(os.path.split(output_file)[0], 'history', str(self._convert_to_timestamp(old_file_time)))
                 self.logger.info(f"创建目录 {dst_dir} 存放历史版本")
                 os.makedirs(dst_dir, exist_ok=True)
-                self.logger.info(f"移动旧版本源码 -> {dst_dir}")
+                self.logger.info(f"移动旧版本 -> {dst_dir}")
                 shutil.move(output_file, dst_dir)
 
 
@@ -816,7 +821,7 @@ class DownloaderBase(ABC):
 
         except Exception as e:
             self.progress.stop()
-            self._log('ERROR', f"下载文件 {file_name} 版本: {version} 失败: {str(e)}")
+            self.logger.error(f"下载文件 {file_name} 版本: {version} 失败: {str(e)}")
             self._send_download_failure_notification(version, file_name, str(e))
             if os.path.exists(temp_file):
                 os.remove(temp_file)
