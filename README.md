@@ -5,7 +5,9 @@
 
 <img width="115" height="25" alt="image" src="https://github.com/user-attachments/assets/454f06c7-6a18-4cb9-b3cc-31e6db45beb6" />
 
-- 执行多个下载的时候，访问之间，我也没加延迟，会不会出问题不晓得，反正试过一口气下载38个项目，没封我代理IP，哈哈
+- 不要双击运。
+- 对于项目文件较大的，可能会看上去像是卡死了不执行，
+- 执行多个下载的时候，访问之间，我也没加延迟，会不会出问题不晓得，反正试过一口气下载38个项目，没封我代理IP。
 - 之前想着打包成exe，但是打包后就出问题，可能是路径的问题，设置不隐藏终端，就可以，设置隐藏终端一执行就报错。
 - 可能会有其他的bug
 
@@ -16,7 +18,11 @@
 爱搜集，保存到本地(●'◡'●)，每次软件更新一个个访问麻烦，让ai帮忙写一个哈哈
 
   ## 二、预览：
-<img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/a2b49fe4-205a-4da8-a9e8-505c86b30916" />
+
+<img width="1750" height="875" alt="image" src="https://github.com/user-attachments/assets/5a03caa8-54c5-4cd4-bfd4-1ddf6d8456d7" />
+
+<img width="1750" height="875" alt="image" src="https://github.com/user-attachments/assets/499c70c4-b52a-4cc1-aee2-df64749167f3" />
+
 
 ## 三、新增项目
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/65eee151-c86c-4ac9-a003-a86f2c33c5f3" />
@@ -91,9 +97,13 @@
 - 日志文件记录没有使用单独的，实际用了同一个，干脆改为大家用同一个日志
 - 执行前自动保存一下配置，我自己经常忘记点击保存
 - 新建项目提默认输出路径
+
 2025年8月27日-07点47分-修复
 - 对于只有latest没有release的项目，即只有源码的项目，对于是否存在新版本，存在判断逻辑存在问题，修复： 首次下载后修改文件的修改时间为commit的时间，下次访问对比这个时间和commit时间，发生变动则下载，历史的版本移动到./history/commit时间戳/xxx.zip
 - 发现线程数设置有问题。直接改为全局的配置而不是单独项目。
 
-
+2025年8月27日-22点31分-修复
+- 没有指定日志的时候日志文件为 ./logs/github_download.log
+- 添加保存的验证逻辑（api，代理，URL格式的基本验证)
+- 勾选项目后，勾选状态丢失问题
 
