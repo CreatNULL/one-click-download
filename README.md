@@ -96,6 +96,77 @@
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/556f02c9-3d11-4cca-928f-eb7576a03115" />
 <img width="1920" height="779" alt="image" src="https://github.com/user-attachments/assets/26fca0c4-e17f-4711-8e5a-3d1b32bb215f" />
 
+## 命令行脚本运行
+<img width="1075" height="418" alt="image" src="https://github.com/user-attachments/assets/851e9552-2a98-40c1-bb1c-45bda7252e1e" />
+
+
+#### 查看所有项目（不包含全局配置）
+```
+ python .\no_gui.py list
+```
+<img width="1399" height="646" alt="image" src="https://github.com/user-attachments/assets/1855515e-f286-4883-9ac5-dc079838ce3c" />
+
+
+#### 查看全局配置
+```
+python .\no_gui.py config global show
+```
+<img width="1383" height="291" alt="image" src="https://github.com/user-attachments/assets/fa8b0bf4-1db2-4490-b851-65c0f3884880" />
+
+
+#### 查看单个项目的配置
+```
+ python .\no_gui.py config project <项目名称> show
+```
+<img width="1327" height="270" alt="image" src="https://github.com/user-attachments/assets/54724958-6359-4532-93ce-feb6523cd124" />
+
+#### 查看单个项目的单个配置
+```
+ python .\no_gui.py config project <项目名称> get url
+```
+<img width="1313" height="82" alt="image" src="https://github.com/user-attachments/assets/5868a2c9-cb4b-4085-a2fb-d11e1da80c22" />
+
+
+#### 设置全局配置
+```
+ python .\no_gui.py config global set threads 6
+```
+<img width="1292" height="337" alt="image" src="https://github.com/user-attachments/assets/c907c17d-2517-47ad-87db-481e4368ab62" />
+
+#### 添加单个项目
+```
+python .\no_gui.py add 
+```
+<img width="1635" height="840" alt="image" src="https://github.com/user-attachments/assets/2786898b-fd11-45b2-85ab-efdb46f55f3c" />
+
+
+#### 执行单个/多个
+```
+python .\no_gui.py execute --projects <项目名称> <项目名称>
+```
+<img width="1406" height="293" alt="image" src="https://github.com/user-attachments/assets/24c95bf3-294d-4b98-a4e5-9a32e216b144" />
+
+#### 执行所有
+```
+python .\no_gui.py execute --all
+```
+
+#### 停止所有
+停止的原理是如果检测到存在.stop_all 则会停止后续的所有线程
+<img width="203" height="75" alt="image" src="https://github.com/user-attachments/assets/1cf8e310-7564-4e4f-9422-ee0e684abd19" />
+
+```
+python .\no_gui.py stop 
+```
+
+<img width="1019" height="99" alt="image" src="https://github.com/user-attachments/assets/8e711dfd-7756-4ef1-8a85-db6dcf6b0501" />
+
+
+#### 执行定时任务
+
+<img width="973" height="179" alt="image" src="https://github.com/user-attachments/assets/f0ac20e4-478a-4c5c-825c-b21dbe645241" />
+
+
 ### 修复
 2025年8月27日-00点11分-修复
 - 代理开关没有立即生效，明明没有勾选应用代理， 还是在使用代理
