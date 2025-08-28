@@ -1,14 +1,11 @@
 import sys
 import os
-import re
-import time
 import shutil
 import logging
 import configparser
 import concurrent.futures
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Union
-from urllib.parse import urlparse
+from datetime import datetime
+from typing import Dict, Any, List
 from croniter import croniter
 from pathvalidate import sanitize_filename
 from PySide6.QtWidgets import (
@@ -18,7 +15,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QGroupBox, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer
-from PySide6.QtGui import QIcon
 from io import StringIO
 from GithubDownload.github import GithubDownloader
 
@@ -797,7 +793,7 @@ class GitHubDownloaderGUI(QMainWindow):
 
             self.config_manager.config[name] = {
                 'url': '',
-                'output': f'./output/{sanitize_filename(name, replacement_text='-')}',
+                'output': f"./output/{sanitize_filename(name, replacement_text='-')}",
                 'action_type': 'download',
                 'only_latest': 'true',
                 'ignore_ssl': 'false',
