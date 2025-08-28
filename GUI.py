@@ -392,14 +392,14 @@ class GitHubDownloaderGUI(QMainWindow):
         http_layout = QHBoxLayout()
         http_layout.addWidget(QLabel("HTTP代理:"))
 
-        self.global_proxy_http.setPlaceholderText("例如: http://127.0.0.1:8080")
+        self.global_proxy_http.setPlaceholderText("例如: http://127.0.0.1:8080/ socks5://127.0.0.1:8083")
         http_layout.addWidget(self.global_proxy_http)
         proxy_layout.addLayout(http_layout)
 
         https_layout = QHBoxLayout()
         https_layout.addWidget(QLabel("HTTPS代理:"))
 
-        self.global_proxy_https.setPlaceholderText("例如: https://127.0.0.1:8080")
+        self.global_proxy_https.setPlaceholderText("例如: https://127.0.0.1:8080 socks5://127.0.0.1:8083")
         https_layout.addWidget(self.global_proxy_https)
         proxy_layout.addLayout(https_layout)
 
@@ -901,10 +901,10 @@ class GitHubDownloaderGUI(QMainWindow):
         if self.dingtalk_webhook.text() and not self.dingtalk_secret.text().strip():
             errors.append("钉钉secret不能为空")
 
-        if self.global_proxy_http.text() and not self.global_proxy_http.text().startswith('http'):
+        if self.global_proxy_http.text() and not self.global_proxy_http.text().startswith('http') and not self.global_proxy_http.text().startswith('socks'):
             errors.append("HTTP代理格式错误")
 
-        if self.global_proxy_https.text() and not self.global_proxy_https.text().startswith('http'):
+        if self.global_proxy_https.text() and not self.global_proxy_https.text().startswith('http') and not self.global_proxy_http.text().startswith('socks'):
             errors.append("HTTPS代理格式错误")
 
         # 获取当前编辑的项目数据（如果有）
