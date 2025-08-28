@@ -98,6 +98,7 @@
 
 ## no_gui.py 命令行 版本
 <img width="771" height="442" alt="image" src="https://github.com/user-attachments/assets/eef3292d-b851-4baf-bfc9-214207918a71" />
+
 查看所有配置
 ```
 python3 no_gui.py list
@@ -112,11 +113,13 @@ python3 no_gui.py add
 python3 no_gui.py config {global,project} show
 ```
 <img width="964" height="596" alt="image" src="https://github.com/user-attachments/assets/eac78d39-be6e-4191-81d5-0b266a4c7025" />
+
 获取/设置 单项
 ```
 python3 no_gui.py config {global,project} {set,get} <key>
 ```
 <img width="1041" height="196" alt="image" src="https://github.com/user-attachments/assets/cc74ae6b-4a1f-41c7-b35c-de7d89499e76" />
+
 执行
 ```
 python3 no_gui.py execute <项目>
