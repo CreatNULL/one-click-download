@@ -103,6 +103,7 @@
 python3 no_gui.py list
 ```
 <img width="1418" height="802" alt="image" src="https://github.com/user-attachments/assets/5e8c6f60-ce24-4075-ac95-1119e1cc11de" />
+
 添加\查看
 ```
 python3 no_gui.py add
@@ -152,4 +153,6 @@ python3 no_gui.py schedule
 
 2025年8月28日-06点08分-修复
 - 修复版本是否更新判断逻辑，原本只是判断是否存在对应版本的文件夹，对于 latest 版本这是有问题的。修改后判断里面的文件是否存在更新。
+2025年8月28日-20点56分-修复
+- 修复模块 dateutil  导入异常
 
