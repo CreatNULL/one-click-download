@@ -9,7 +9,7 @@
 - 可能会有其他的bug
 
 ## 待改进的bug
-暂无
+让他支持socks5
 
 ## 一、介绍：
 爱搜集，保存到本地(●'◡'●)，每次软件更新一个个访问麻烦，让ai帮忙写一个哈哈
@@ -91,7 +91,7 @@
 
 
 ### (八)、代理
-没啥用的代理感觉，用的是requests的 proxies参数，它不支持带账号密码代理
+
 勾选，保存配置，才能应用代理
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/556f02c9-3d11-4cca-928f-eb7576a03115" />
 <img width="1920" height="779" alt="image" src="https://github.com/user-attachments/assets/26fca0c4-e17f-4711-8e5a-3d1b32bb215f" />
