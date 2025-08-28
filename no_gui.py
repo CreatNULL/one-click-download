@@ -16,6 +16,8 @@ from typing import Dict, Any, List
 from croniter import croniter
 from pathvalidate import sanitize_filename
 from GithubDownload.github import GithubDownloader
+import threading
+import concurrent.futures
 
 def get_app_path():
     """获取应用程序所在目录"""
@@ -24,247 +26,7 @@ def get_app_path():
     else:
         return os.path.dirname(os.path.abspath(__file__))
 
-import os
-import time
-import threading
-import concurrent.futures
-from typing import Dict, Any, List
 
-
-# class TaskExecutor:
-#     """任务执行器"""
-#     def __init__(self, configs: List[Dict[str, Any]], max_workers: int = 4):
-#         """
-#         初始化任务执行器
-#
-#         :param configs: 任务配置列表
-#         :param max_workers: 最大工作线程数
-#         """
-#         self.configs = configs
-#         self.max_workers = max_workers
-#         self._stop_flag = threading.Event()
-#         self.downloaders = {}
-#         self.status_files = {}
-#         self.monitor_thread = None
-#         self.executor = None
-#         self.lock = threading.Lock()
-#         self.task_complete_events = {}  # 新增：任务完成事件字典
-#
-#         # 创建运行状态目录
-#         self.status_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.run_status')
-#         os.makedirs(self.status_dir, exist_ok=True)
-#         self.global_stop_file = os.path.join(self.status_dir, '.stop_all')
-#
-#     def _create_status_file(self, project_name: str) -> str:
-#         """创建运行状态文件"""
-#         status_file = os.path.join(self.status_dir, f"{project_name}.run")
-#         with open(status_file, 'w') as f:
-#             f.write(str(os.getpid()))
-#         with self.lock:
-#             self.status_files[project_name] = status_file
-#             # 为每个任务创建完成事件
-#             self.task_complete_events[project_name] = threading.Event()
-#         return status_file
-#
-#     def _remove_status_file(self, project_name: str):
-#         """删除运行状态文件"""
-#         with self.lock:
-#             if project_name in self.status_files:
-#                 try:
-#                     os.unlink(self.status_files[project_name])
-#                     del self.status_files[project_name]
-#                 except:
-#                     pass
-#             # 清理任务完成事件
-#             if project_name in self.task_complete_events:
-#                 del self.task_complete_events[project_name]
-#
-#     def _check_global_stop(self) -> bool:
-#         """检查全局停止文件是否存在"""
-#         return os.path.exists(self.global_stop_file)
-#
-#     def _monitor_stop_signals(self):
-#         """监控停止信号的独立线程"""
-#         while not self._stop_flag.is_set():
-#             try:
-#                 if self._stop_flag.is_set() or self._check_global_stop():
-#                     self._stop_flag.set()
-#                     break
-#
-#                 with self.lock:
-#                     for project_name, downloader in list(self.downloaders.items()):
-#                         if project_name in self.status_files:
-#                             status_file = self.status_files[project_name]
-#                             if not os.path.exists(status_file):
-#                                 print(f"检测到停止信号，正在停止项目: {project_name}")
-#                                 downloader.stop_download()
-#                                 self._remove_status_file(project_name)
-#                                 self.downloaders.pop(project_name, None)
-#                                 # 设置任务完成事件
-#                                 if project_name in self.task_complete_events:
-#                                     self.task_complete_events[project_name].set()
-#
-#                 time.sleep(0.5)
-#             except Exception as e:
-#                 print(f"监控线程出错: {str(e)}")
-#                 time.sleep(1)
-#
-#     def stop(self, all_tasks=False):
-#         """
-#         停止下载任务
-#
-#         :param all_tasks: 是否停止所有任务(包括未开始的)
-#         """
-#         self._stop_flag.set()
-#
-#         # 设置所有任务完成事件
-#         with self.lock:
-#             for event in self.task_complete_events.values():
-#                 event.set()
-#
-#         # 停止监控线程
-#         if self.monitor_thread and self.monitor_thread.is_alive():
-#             self.monitor_thread.join(timeout=1)
-#
-#         # 停止所有下载器
-#         with self.lock:
-#             for downloader in self.downloaders.values():
-#                 downloader.stop_download()
-#
-#         # 清理所有状态文件
-#         with self.lock:
-#             for project_name in list(self.status_files.keys()):
-#                 self._remove_status_file(project_name)
-#
-#         # 如果停止所有任务，则关闭线程池
-#         if all_tasks and self.executor:
-#             self.executor.shutdown(wait=False)
-#
-#     def execute(self):
-#         """执行所有任务"""
-#         if self._stop_flag.is_set() or self._check_global_stop():
-#             print("任务执行已停止")
-#             return
-#
-#         self.monitor_thread = threading.Thread(
-#             target=self._monitor_stop_signals,
-#             daemon=True
-#         )
-#         self.monitor_thread.start()
-#
-#         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
-#         futures = {}
-#
-#         try:
-#             for config in self.configs:
-#                 if self._stop_flag.is_set() or self._check_global_stop():
-#                     break
-#
-#                 future = self.executor.submit(self.execute_task, config)
-#                 futures[future] = config
-#
-#             for future in concurrent.futures.as_completed(futures):
-#                 if self._stop_flag.is_set() or self._check_global_stop():
-#                     self.executor.shutdown(wait=False)
-#                     return
-#
-#                 config = futures[future]
-#                 try:
-#                     future.result()
-#                 except Exception as e:
-#                     print(f"任务执行错误: {str(e)}")
-#         finally:
-#             if not self._stop_flag.is_set() and not self._check_global_stop():
-#                 self.executor.shutdown()
-#
-#     def execute_task(self, config: Dict[str, Any]):
-#         """
-#         执行单个任务
-#
-#         :param config: 任务配置字典
-#         """
-#         if self._stop_flag.is_set() or self._check_global_stop():
-#             return
-#
-#         project_name = config['name']
-#         action_type = config.get('action_type', 'download').lower()
-#         status_file = self._create_status_file(project_name)
-#
-#         try:
-#             # 获取任务完成事件
-#             with self.lock:
-#                 task_complete_event = self.task_complete_events.get(project_name)
-#
-#             # 确保代理设置正确
-#             proxies = config.get('proxies', {})
-#             if not isinstance(proxies, dict):
-#                 proxies = {}
-#             if not proxies.get('http') and not proxies.get('https'):
-#                 proxies = None
-#             else:
-#                 print(f"使用代理设置: {proxies}")
-#
-#             downloader = GithubDownloader(
-#                 url=config['url'],
-#                 output=config.get('output'),
-#                 dingtalk_webhook=config.get('dingtalk_webhook'),
-#                 dingtalk_secret=config.get('dingtalk_secret'),
-#                 project_name=project_name,
-#                 only_latest=config.get('only_latest', True),
-#                 threads=config.get('threads', 4),
-#                 log_file=config.get('log_file'),
-#                 verify=not config.get('ignore_ssl', True),
-#                 proxies=proxies,
-#                 timeout=30
-#             )
-#
-#             # 存储下载器实例以便后续停止
-#             with self.lock:
-#                 self.downloaders[project_name] = downloader
-#
-#             if action_type == 'download':
-#                 try:
-#                     version_info = downloader.request()
-#                     # 定期检查是否应该停止
-#                     if not self._stop_flag.is_set() and not self._check_global_stop():
-#                         downloader.download(version_info)
-#                         # 检查是否被停止
-#                         if task_complete_event and task_complete_event.is_set():
-#                             print(f"项目 {project_name} 下载被中断")
-#                             return
-#                         print(f"项目 {project_name} 下载完成")
-#                 except Exception as e:
-#                     print(f"下载项目 {project_name} 时发生错误: {e}")
-#                     if config.get('dingtalk_webhook'):
-#                         downloader._send_other_msg(
-#                             f"下载项目 {project_name} 失败",
-#                             f"URL: {config['url']}\n错误信息: {str(e)}"
-#                         )
-#
-#             elif action_type == 'update':
-#                 try:
-#                     updates = downloader.check_updates()
-#                     if updates:
-#                         print(f"项目 {project_name} 有更新可用:")
-#                         for update in updates:
-#                             print(f"  - {update}")
-#                     else:
-#                         print(f"项目 {project_name} 已是最新版本")
-#                 except Exception as e:
-#                     print(f"检查项目 {project_name} 更新时发生错误: {e}")
-#                     if config.get('dingtalk_webhook'):
-#                         downloader._send_other_msg(
-#                             f"检查项目 {project_name} 更新失败",
-#                             f"URL: {config['url']}\n错误信息: {str(e)}"
-#                         )
-#
-#         except Exception as e:
-#             print(f"处理项目 {project_name} 时发生错误: {e}")
-#         finally:
-#             # 任务完成后移除状态文件和下载器引用
-#             self._remove_status_file(project_name)
-#             with self.lock:
-#                 self.downloaders.pop(project_name, None)
 
 
 class TaskExecutor:
@@ -418,13 +180,14 @@ class TaskExecutor:
 
             # 确保代理设置正确
             proxies = config.get('proxies', {})
+            enable_proxy = config.get('enable_proxy', True)
             if not isinstance(proxies, dict):
                 proxies = {}
-            if not proxies.get('http') and not proxies.get('https'):
+            if not proxies.get('http') and not proxies.get('https') and not enable_proxy or enable_proxy == 'false':
                 proxies = None
             else:
                 print(f"使用代理设置: {proxies}")
-
+            print(enable_proxy, proxies)
             downloader = GithubDownloader(
                 url=config['url'],
                 output=config.get('output'),
@@ -597,7 +360,7 @@ class GitHubDownloaderCLI:
                 if not proxies['http'] and not proxies['https']:
                     proxies = None
                 config['proxies'] = proxies
-
+            config['enable_proxy'] = global_config.get('enable_proxy', True)
             config['log_file'] = global_config.get('log_file')
             config['dingtalk_webhook'] = global_config.get('dingtalk_webhook')
             config['dingtalk_secret'] = global_config.get('dingtalk_secret')
