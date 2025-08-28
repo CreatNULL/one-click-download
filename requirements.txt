@@ -11,4 +11,4 @@ rich
 pyside6
 croniter
 pathvalidate
-pywin32
+pywin32; sys_platform == 'win32'
