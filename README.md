@@ -9,7 +9,7 @@
 - 可能会有其他的bug
 
 ## 待改进的bug
-让他支持socks5
+无
 
 ## 一、介绍：
 爱搜集，保存到本地(●'◡'●)，每次软件更新一个个访问麻烦，让ai帮忙写一个哈哈
@@ -95,6 +95,8 @@
 勾选，保存配置，才能应用代理
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/556f02c9-3d11-4cca-928f-eb7576a03115" />
 <img width="1920" height="779" alt="image" src="https://github.com/user-attachments/assets/26fca0c4-e17f-4711-8e5a-3d1b32bb215f" />
+<img width="1360" height="767" alt="image" src="https://github.com/user-attachments/assets/2aebba6b-d022-482b-ad4c-ba21427e1496" />
+
 
 ## no_gui.py 命令行 版本
 <img width="771" height="442" alt="image" src="https://github.com/user-attachments/assets/eef3292d-b851-4baf-bfc9-214207918a71" />
