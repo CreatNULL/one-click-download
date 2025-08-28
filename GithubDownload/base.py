@@ -1,8 +1,6 @@
 import os
 import re
 import shutil
-
-import dateutil
 import requests
 import hashlib
 import urllib3
@@ -10,22 +8,21 @@ import logging
 import pefile
 import hmac
 import base64
-import sys
 import platform
-from datetime import datetime
 import time
-import pywintypes
-import win32file
-import win32con
+if platform.system() == "Windows":
+    import pywintypes
+    import win32file
+    import win32con
+from datetime import datetime
+from dateutil import parser
+from threading import Lock
 from abc import ABC, abstractmethod
 from urllib.parse import unquote, urlparse
 from typing import Optional, Dict, Any, List, Union
 from urllib3.exceptions import InsecureRequestWarning
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
 from colorama import Fore, Style, init
-init(autoreset=True)
-
 # Rich 相关导入
 from rich.console import Console
 from rich.table import Table
@@ -39,9 +36,9 @@ from rich.progress import (
 )
 
 
-
-
+init(autoreset=True)
 ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
 
 class DingTalkNotifier:
     """钉钉机器人通知类"""
@@ -521,7 +518,7 @@ class DownloaderBase(ABC):
         elif isinstance(time_input, str):
             try:
                 # 尝试解析ISO 8601格式
-                dt = dateutil.parser.isoparse(time_input)
+                dt = parser.parse(time_input)
                 return dt.timestamp()
             except ValueError:
                 try:
