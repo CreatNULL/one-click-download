@@ -2,7 +2,7 @@ python-dateutil
 colorama
 urllib3
 beautifulsoup4
-requests
+requests[socks]
 pefile
 tqdm
 markdownify
@@ -12,3 +12,4 @@ pyside6
 croniter
 pathvalidate
 pywin32; sys_platform == 'win32'
+
