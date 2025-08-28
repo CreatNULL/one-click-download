@@ -96,6 +96,42 @@
 <img width="1752" height="914" alt="image" src="https://github.com/user-attachments/assets/556f02c9-3d11-4cca-928f-eb7576a03115" />
 <img width="1920" height="779" alt="image" src="https://github.com/user-attachments/assets/26fca0c4-e17f-4711-8e5a-3d1b32bb215f" />
 
+## no_gui.py 命令行 版本
+<img width="771" height="442" alt="image" src="https://github.com/user-attachments/assets/eef3292d-b851-4baf-bfc9-214207918a71" />
+查看所有配置
+```
+python3 no_gui.py list
+```
+<img width="1418" height="802" alt="image" src="https://github.com/user-attachments/assets/5e8c6f60-ce24-4075-ac95-1119e1cc11de" />
+添加\查看
+```
+python3 no_gui.py add
+```
+```
+python3 no_gui.py config {global,project} show
+```
+<img width="964" height="596" alt="image" src="https://github.com/user-attachments/assets/eac78d39-be6e-4191-81d5-0b266a4c7025" />
+获取/设置 单项
+```
+python3 no_gui.py config {global,project} {set,get} <key>
+```
+<img width="1041" height="196" alt="image" src="https://github.com/user-attachments/assets/cc74ae6b-4a1f-41c7-b35c-de7d89499e76" />
+执行
+```
+python3 no_gui.py execute <项目>
+python3 no_gui.py execute  # 执行下载所有的
+```
+<img width="1587" height="794" alt="image" src="https://github.com/user-attachments/assets/931bd38a-e5d1-4647-9853-9b3fc9b8fb49" />
+
+停止所有的(正在下载的不会停止）
+```
+python3 no_gui.py stop
+```
+定时任务 (需要配置定时配置，和需要执行的项目）
+```
+python3 no_gui.py schedule
+```
+<img width="1150" height="350" alt="image" src="https://github.com/user-attachments/assets/c00cea4c-8887-4eab-8333-c1d550647bca" />
 
 
 ### 修复
