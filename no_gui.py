@@ -335,8 +335,15 @@ class GitHubDownloaderCLI:
         global_config = self.config_manager.get_global_config()
         log_file = global_config.get('log_file', os.path.join(self.app_path, 'logs', 'github_downloader.log'))
 
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        # 添加检查：如果 log_file 为空或无效，使用默认路径
+        if not log_file or not log_file.strip():
+            log_file = os.path.join(self.app_path, 'logs', 'github_downloader.log')
 
+        # 只有在 log_file 不为空时才创建目录
+        if log_file and log_file.strip():
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+        # 设置日志配置
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -779,5 +786,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
