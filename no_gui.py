@@ -187,7 +187,7 @@ class TaskExecutor:
                 proxies = None
             else:
                 print(f"使用代理设置: {proxies}")
-            print(enable_proxy, proxies)
+    
             downloader = GithubDownloader(
                 url=config['url'],
                 output=config.get('output'),
@@ -779,5 +779,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
