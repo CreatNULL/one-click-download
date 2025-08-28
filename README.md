@@ -7,6 +7,7 @@
 - 执行多个下载的时候，访问之间，我也没加延迟，会不会出问题不晓得，反正试过一口气下载38个项目，没封我代理IP。
 - 之前想着打包成exe，但是打包后就出问题，可能是路径的问题，设置不隐藏终端，就可以，设置隐藏终端一执行就报错。
 - 可能会有其他的bug
+- GUI_with_group.py 新增分组功能版本，但是不确定有没有bug所有就先独立放着
 
 ## 待改进的bug
 无
@@ -140,6 +141,7 @@ python3 no_gui.py schedule
 <img width="1150" height="350" alt="image" src="https://github.com/user-attachments/assets/c00cea4c-8887-4eab-8333-c1d550647bca" />
 
 
+
 ### 修复
 2025年8月27日-00点11分-修复
 - 代理开关没有立即生效，明明没有勾选应用代理， 还是在使用代理
@@ -160,4 +162,11 @@ python3 no_gui.py schedule
 - 修复版本是否更新判断逻辑，原本只是判断是否存在对应版本的文件夹，对于 latest 版本这是有问题的。修改后判断里面的文件是否存在更新。
 2025年8月28日-20点56分-修复
 - 修复模块 dateutil  导入异常
+
+2025年8月28日-20点12分-新增
+- 改了个依赖下载支持socks版本的requests，让他支持socks代理
+
+2025年8月29日-06点41分-新增分组功能版本
+GUI_with_group.py
+<img width="1750" height="911" alt="image" src="https://github.com/user-attachments/assets/734f8297-fad1-4b10-986c-5753763ced03" />
 
